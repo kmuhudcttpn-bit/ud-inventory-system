@@ -631,8 +631,16 @@
 2ATROP	Atropine 1mg/1mL/Amp	前置藥		1mg  	Amp`;
 
         function InventoryApp() {
-            const [isSetupMode, setIsSetupMode] = useState(true);
-            const [firebaseConfig, setFirebaseConfig] = useState('');
+            const [isSetupMode, setIsSetupMode] = useState(false); // 直接關閉設定模式
+            const [firebaseConfig, setFirebaseConfig] = useState(JSON.stringify({
+                "apiKey": "AIzaSyAs68fX_3NhFw6eCtbg-YEOQyX5ffCjgSM",
+                "authDomain": "kmuh-inventory-2025.firebaseapp.com",
+                "databaseURL": "https://kmuh-inventory-2025-default-rtdb.firebaseio.com",
+                "projectId": "kmuh-inventory-2025",
+                "storageBucket": "kmuh-inventory-2025.appspot.com",
+                "messagingSenderId": "264425776463",
+                "appId": "1:264425776463:web:c6ff9d43f9e4e5567cd13a"
+            }));
             const [isConnected, setIsConnected] = useState(false);
             const [drugs, setDrugs] = useState([]);
             const [inventoryRecords, setInventoryRecords] = useState([]);
@@ -714,11 +722,14 @@
             function initializeDrugsData() {
                 dbRef.current.ref('drugs').once('value', (snapshot) => {
                     if (!snapshot.exists()) {
-                        // 如果資料庫沒有藥品資料，上傳初始資料
-                        parseDrugsData(initialDrugsData, true);
+                        // 資料庫是空的，設定為空列表
+                        // 用戶需要通過「上傳區」上傳藥品清單
+                        setDrugs([]);
+                        console.log('資料庫是空的，請到「上傳區」上傳藥品清單');
                     } else {
                         const drugsData = snapshot.val();
                         setDrugs(Object.values(drugsData));
+                        console.log('從 Firebase 載入了', Object.keys(drugsData).length, '筆藥品資料');
                     }
                 });
             }
@@ -981,14 +992,10 @@
                 reader.readAsText(file);
             }
 
-            // 檢查是否有儲存的配置
+            // 自動初始化 Firebase
             useEffect(() => {
-                const savedConfig = localStorage.getItem('firebaseConfig');
-                if (savedConfig) {
-                    initializeFirebase(savedConfig);
-                } else {
-                    parseDrugsData(initialDrugsData);
-                }
+                // 自動使用內建的 Firebase 配置連線
+                initializeFirebase(firebaseConfig);
 
                 // 清理函數
                 return () => {
