@@ -768,24 +768,35 @@
                     header: true,
                     skipEmptyLines: true,
                     complete: (results) => {
-                        const parsedDrugs = results.data.map((row, index) => ({
-                            id: `drug_${index}`,
-                            code: row['藥碼'] || '',
-                            name: row['藥品名稱'] || '',
-                            location: row['櫃位'] || '',
-                            stock: row['實際庫存'] || '',
-                            spec: row['規格'] || '',
-                            unit: row['單位'] || ''
-                        }));
+                        const parsedDrugs = results.data
+                            .filter(row => row['藥品名稱']) // 過濾掉空行
+                            .map((row, index) => ({
+                                id: `drug_${index}`,
+                                code: row['藥碼'] || '',
+                                name: row['藥品名稱'] || '',
+                                location: row['櫃位名稱'] || row['櫃位'] || '', // 支援兩種欄位名稱
+                                stock: row['實際庫存'] || '',
+                                spec: row['規格'] || '',
+                                unit: row['單位'] || ''
+                            }));
                         
+                        // 先更新本地狀態，讓使用者立即看到資料
+                        setDrugs(parsedDrugs);
+                        
+                        // 如果需要，同時上傳到 Firebase
                         if (uploadToFirebase && dbRef.current) {
                             const drugsObj = {};
                             parsedDrugs.forEach(drug => {
                                 drugsObj[drug.id] = drug;
                             });
-                            dbRef.current.ref('drugs').set(drugsObj);
-                        } else {
-                            setDrugs(parsedDrugs);
+                            dbRef.current.ref('drugs').set(drugsObj)
+                                .then(() => {
+                                    console.log('資料已成功上傳到 Firebase，共', parsedDrugs.length, '筆');
+                                })
+                                .catch((error) => {
+                                    console.error('上傳到 Firebase 失敗:', error);
+                                    setMessage({ text: '資料上傳失敗: ' + error.message, type: 'error' });
+                                });
                         }
                     }
                 });
@@ -937,11 +948,35 @@
                 const file = event.target.files[0];
                 if (!file) return;
 
+                // 檢查檔案類型
+                const fileExtension = file.name.split('.').pop().toLowerCase();
+                if (!['csv', 'xlsx', 'xls'].includes(fileExtension)) {
+                    setMessage({ text: '請上傳 CSV 或 Excel 檔案', type: 'error' });
+                    return;
+                }
+
+                setMessage({ text: '正在處理檔案...', type: 'success' });
+
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    parseDrugsData(e.target.result, true);
-                    setMessage({ text: '藥品清單更新成功！已同步到所有使用者', type: 'success' });
-                    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+                    try {
+                        parseDrugsData(e.target.result, isConnected); // 只有在連線時才上傳到 Firebase
+                        setMessage({ 
+                            text: isConnected ? 
+                                '藥品清單更新成功！已同步到所有使用者' : 
+                                '藥品清單更新成功！（離線模式，未同步到雲端）', 
+                            type: 'success' 
+                        });
+                        setTimeout(() => setMessage({ text: '', type: '' }), 5000);
+                        
+                        // 清空文件選擇器，允許重複上傳同一個檔案
+                        event.target.value = '';
+                    } catch (error) {
+                        setMessage({ text: '檔案處理失敗: ' + error.message, type: 'error' });
+                    }
+                };
+                reader.onerror = () => {
+                    setMessage({ text: '檔案讀取失敗', type: 'error' });
                 };
                 reader.readAsText(file);
             }
