@@ -658,7 +658,20 @@
             
             const dbRef = useRef(null);
             const userSessionRef = useRef(null);
-            const myUserId = useRef(`user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+            const myUserId = useRef(null);
+
+if (!myUserId.current) {
+    const savedId = localStorage.getItem('inventoryUserId');
+    if (savedId) {
+        // 之前已經產生過 ID，就沿用
+        myUserId.current = savedId;
+    } else {
+        // 第一次使用，產生一個新的 ID
+        const newId = `user_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('inventoryUserId', newId);
+        myUserId.current = newId;
+    }
+}
 
             function getCurrentYearMonth() {
                 const now = new Date();
