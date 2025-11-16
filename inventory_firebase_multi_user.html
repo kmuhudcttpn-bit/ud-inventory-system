@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>住院盤點系統</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- React -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft JhengHei', 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #28a745;
+        }
+
+        .status-dot.disconnected {
+            background: #dc3545;
+            animation: none;
+        }
+
+        .status-dot.setup {
+            background: #ffc107;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .setup-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .setup-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .setup-content h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .setup-content textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            margin: 15px 0;
+        }
+
+        .section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .online-users {
+            font-size: 0.8em;
+            color: #28a745;
+            font-weight: normal;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        select, input[type="number"], input[type="month"], input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: bold;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button.secondary {
+            background: #6c757d;
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 15px;
+        }
+
+        .search-box input {
+            padding-right: 40px;
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+        }
+
+        .drug-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .drug-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+            position: relative;
+        }
+
+        .drug-item:hover {
+            background: #e9ecef;
+        }
+
+        .drug-item.selected {
+            background: #667eea;
+            color: white;
+        }
+
+        .drug-item.completed {
+            background: #d4edda;
+            color: #155724;
+            cursor: default;
+        }
+
+        .drug-item.completed:hover {
+            background: #d4edda;
+        }
+
+        .drug-item.being-counted {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+
+        .counting-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #ffc107;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            font-weight: bold;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        .warning-message {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 1px solid #ffeeba;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .current-selection {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .recent-activity {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+
+        .activity-item {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            font-size: 0.9em;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-time {
+            color: #666;
+            font-size: 0.85em;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .section {
+                padding: 15px;
+            }
+
+            .connection-status {
+                top: 10px;
+                right: 10px;
+                padding: 8px 12px;
+                font-size: 0.9em;
+            }
+        }
+
+        /* 分頁樣式 */
+        .tabs-container {
+            background: white;
+            border-radius: 15px;
+            padding: 0;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .tabs-header {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 20px;
+            background: transparent;
+            border: none;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-radius: 0;
+            position: relative;
+        }
+
+        .tab-button:hover {
+            background: #e9ecef;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .tab-button.active {
+            background: white;
+            color: #667eea;
+        }
+
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -3px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #667eea;
+        }
+
+        .tab-content {
+            padding: 25px;
+        }
+
+        .tab-icon {
+            font-size: 1.3em;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // 初始藥品資料
+        const initialDrugsData = `藥碼	藥品名稱	櫃位	實際庫存	規格	單位
+1AKYNZ	Akynzeo	前置藥		複方   	Cap
+1AP125	APRETO*高劑量*125mg	前置藥		125mg  	Cap
+25FUNK	5-FU*高1g*南光	A		20mL   	Vial  
+2ABRAX	Abraxane(Nab-Paclitaxel)	B		100mg  	Vial  
+2ADC50	Adcetris*限院核	冷A		50mg   	Vial  
+2ADREN	Adrenalin0.1%針Epinephrine防滲	無櫃位		1mL    	Amp   
+2ADRIA	Adriamycin 10mg Solution	冷B		5mL    	Vial  
+2ALIM0	Alimta 500mg*低收入戶免費專案*	無櫃位		500mg  	Vial  
+2ALIM1	Alimta*低100mg*(Pemetrexed)#	無櫃位		100mg  	Vial  
+2ALIMT	Alimta*高500mg*(Pemetrexed)#	無櫃位		500mg  	Vial  
+2ALIQ0	Aliqopa*贈藥	無櫃位		60mg   	Vial  
+2ALIQO	Aliqopa*院核	無櫃位		60mg   	Vial  
+2ALOXI	Aloxi	無櫃位		5mL    	Vial  
+2ASADI	Asadin 罕藥	B		10mL   	Vial  
+2ATEZO	TECENTRIQ贈藥*1.2g*高	無櫃位		20mL   	Vial  
+2ATRIA	Atriance 250mg*衛專*自費	無櫃位		50mL   	Vial  
+2AVAS0	Avastin*贈藥*100mg	冷C		4mL    	Vial  
+2AVAS1	Avastin 100mg	冷A		4mL    	Vial  
+2BENDA	Bendamustine	B		100mg  	Vial  
+2BESPO	Besponsa*院核	無櫃位		1mg    	Vial  
+2BLEOM	Bleomycin 15mg/Vial(Bleocin)	冷A		15mg   	Vial  
+2BLIN0	Blincyto贈藥	冷B		35mcg  	Vial  
+2BLINC	Blincyto*院核	冷B		35mcg  	Vial  
+2BRED 	B-Red   (Vit.B12)  1mg	前置藥		1mL    	Vial  
+2BUSUL	Busulfex 針60mg/10mL	冷B		10mL   	Vial  
+2CARMU	Carmuther 100(BiCNU)衛福部專案	冷A		100mg  	Vial  
+2COLU0	Columvi 2.5mg*贈藥	冷D		2.5mg  	Vial  
+2COLUM	Columvi 10mg*院核	無櫃位		10mg   	
+2COVOR	Covorin	無櫃位		5mL    	Vial  
+2CY500	Cytosar 500mg針	B		500mg  	Amp   
+2CYR1 	Cyramza*低100mg*	無櫃位		10mL   	Vial  
+2CYR5 	CYRAMZA*高500mg*	無櫃位		50mL   	Vial  
+2CYRA1	Cyramza*低100mg*贈藥*DC	無櫃位		10mL   	Vial  
+2DACAR	Dacarbazine	冷A		200mg  	Vial  
+2DACOG	Dacogen	B		50mg   	Vial  
+2DACTI	Dactilon 0.5mg*衛專*院核	B		0.5mg  	Vial  
+2DARSC	Darzalex*皮下*1800mg*院核	無櫃位		15mL   	Vial  
+2DARZ1	Darzalex*低*100mg	無櫃位		5mL    	Vial  
+2DARZ4	DARZALEX*高*400mg	無櫃位		20mL   	Vial  
+2DAU20	Daunoblastina (Daunorubicin)  	B		20mg   	Vial  
+2DEXAM	DexaMEthasone針*力佳爽*生達	前置藥		1mL    	Vial  
+2DIPTY	Diphenhydramine*台裕*	前置藥		1mL    	Vial  
+2ELOXA	Eloxatin 50mg	無櫃位		10mL   	Vial  
+2EMEND	Emend*針*	無櫃位		150mg  	Vial  
+2EMPL0	Empliciti*贈藥	無櫃位		300mg  	Vial  
+2EMPLI	Empliciti*院核	冷A		300mg  	Vial  
+2ENDO5	Endoxan 針	A		500mg  	Vial  
+2ENHE0	Enhertu*贈藥	冷B		100mg  	Vial  
+2ENHER	Enhertu	冷B		100mg  	Vial  
+2EPKI0	Epkinly*低*贈藥	冷C		4mg    	Vial  
+2EPKI4	Epkinly*低*院核	無櫃位			Vial  
+2ERB20	Erbitux 新*5mg/mL* 100mg/Vial	冷B		20mL   	
+2ERBI0	Erbitux*贈藥*100mg/20mL/Vial	冷B		20mL   	Vial  
+2ERWI0	Erwinase"贈藥"	冷B		1萬unit	Vial  
+2ERWI1	Erwinase"新*自費*衛專	冷B		1萬unit	Vial  
+2EVO0 	Evoltra*贈藥*20mg	無櫃位		20mg   	Vial  
+2EVO20	Evoltra 20mg*院核	無櫃位		20mg   	Vial  
+2FEBAC	Fe-Back(Fe3+:100mg/5mL)	前置藥		5mL    	Vial  
+2FLUDA	Fludara*院核50mg 針	B		50mg   	Vial  
+2FLUOR	Fluorescite 10%	無櫃位		5mL    	Vial  
+2FOLIN	Folina針 50mg#	無櫃位		5mL    	Vial  
+2FOLOT	Folotyn 20mg*限院核*	無櫃位		1mL    	Vial  
+2FYTOS	Fytosid抗癌藥 100mg	B		5mL    	Vial  
+2GEMCI	Gemcitabine Sandoz	冷D		200mg  	Vial  
+2GLOF0	Columvi 10mg**贈藥	冷D			Vial  
+2GR250	GRANOCYTE 250mcg	前置藥		250mcg 	Vial  
+2GRANT	Grantron	前置藥		3mg    	Vial  
+2HALAV	Halaven	C		2mL    	Vial  
+2HERC0	Herceptin"贈藥"440mg	冷A		440mg  	Vial  
+2HERC4	Herceptin 440mg/Vial	冷A		440mg  	Vial  
+2HERSC	Herceptin SC 600mg	冰箱		5mL    	Vial  
+2HESC0	Herceptin SC*贈藥600mg	冰箱		5mL    	Vial  
+2HOLOX	Holoxan (Ifosfamide)          	C		2g     	Vial  
+2HYCAM	Hycamtin	無櫃位		4mg    	Vial  
+2HYCYH	HYDROCORTISONE "CYH"	前置藥		100mg  	Vial  
+2IMD10	IMDELLTRA*高*贈藥*衛專	冷D		10mg   	Vial  
+2IMDE0	Imdelltra*低*贈藥*衛專	冷D		1mg    	Vial  
+2IMDE1	Imdelltra*低*院核*自費	冷D		1mg    	Vial  
+2IMF10	Imfinzi 120mg*低劑量*贈藥	無櫃位		2.4mL  	Vial  
+2IMF12	Imfinzi 120mg*自費*低*限院核	無櫃位		2.4mL  	Vial  
+2IMF20	IMFINZI 500mg*高劑量*贈藥	無櫃位		10mL   	Vial  
+2IMFIN	IMFINZI 500mg*高	無櫃位		10mL   	Vial  
+2INTA1	Intaxel*高*100mg(Paclitaxel)	A		16.7mL 	Vial  
+2INTA3	Intaxel*低*30mg(Paclitaxel)	A		5mL    	Vial  
+2IRIN5	Irino	C		5mL    	Vial  
+2IXE15	Ixempra*限院核*	冷A		15mg   	Vial  
+2IXEMP	Ixempra贈藥	冷A		15mg   	Vial  
+2JEVTA	Jevtana*自費*60mg*院核	C		60mg   	Vial  
+2KA100	Kadcyla*低100mg	冷B		100mg  	Vial  
+2KA160	KADCYLA*高160mg	冷B		160mg  	Vial  
+2KADC0	Kadcyla"贈藥"低100mg	冷D		100mg  	Vial  
+2KADC1	KADCYLA"贈藥"高160mg	冷D		160mg  	Vial  
+2KCLNA	KCl大*五佰mL(20mEq)in NS0.298%	前置藥		500mL  	Vial  
+2KE50 	Cisplatin(Kemoplat)高50mg/50mL	A		50mg   	Vial  
+2KEMOC	Kemocarb(Carboplatin)150mg	A		15mL   	Vial  
+2KEYT0	Keytruda贈藥	無櫃位		50mg   	Vial  
+2KEYT1	KEYTRUDA*高*100mg	無櫃位		4mL    	Vial  
+2KYPRO	Kyprolis 30mg*院核	冷A		30mg   	Vial  
+2LEUN1	Leunase 10000KU	無櫃位		10000KU	Vial  
+2LEUST	Leustatin 10mg*院核	無櫃位		10mL   	Vial  
+2LIPD0	Lipo-Dox*贈藥	冷C		10mL   	Vial  
+2LIPOD	Lipo-Dox微脂體	冷B		10mL   	Vial  
+2MABSC	Mabthera SC皮下注射 1400mg	#N/A		11.7mL 	Vial  
+2MABT1	Mabthera*低*100mg	冷A		10mL   	Vial  
+2MABT5	MABTHERA*高劑量*500mg	冷A		50mL   	Vial  
+2MEDAS	MEDason*命得生*	前置藥		40mg   	Vial  
+2MELPH	Melphadn*衛專	無櫃位		50mg   	Vial  
+2MEPHA	Mephal	無櫃位		50mg   	Vial  
+2METEB	Methotrexat *Ebewe*針 500mg	A		5mL    	Vial  
+2MGSO4	MaGnesium 紅鎂 sulfate 2g/20mL	前置藥		20mL   	Vial  
+2MIT20	mIToxantrone 20mg/10mL	無櫃位		10mL   	Vial  
+2MITON	Mitonco(Mitomycin)	C		10mg   	Vial  
+2MITOX	Mitoxantrone USP*衛專*	冷A		10mL   	Vial  
+2MVAS0	Mvasi 100mg*贈藥	無櫃位		4mL    	Vial  
+2MVASI	MVASI	無櫃位		4mL    	Vial  
+2MYLO5	Mylotarg*院核	無櫃位		5mg    	Vial  
+2NAV10	Navelbine*針	冷A		1mL    	Vial  
+2NIVES	Nivestim *300 mcg/0.5mL(GCSF)	前置藥		0.5mL  	Vial  
+2NOVAM	Novamin*針*	前置藥		1mL    	Vial  
+2OG440	Ogivri*自費	冷B		440mg  	Vial  
+2OGIVR	Ogivri	冷B		440mg  	Vial  
+2ONCOG	Oncoginase 10000KU*衛專	冷B		10000KU	Vial  
+2ONCOT	OncoTice"限院核"衛福部專案	無櫃位		12.5mg 	Vial  
+2ONIV0	Onivyde贈藥	冷B		43mg   	Vial  
+2ONIVY	Onivyde*微脂體*	冷B		43mg   	Vial  
+2OP100	OPDIVO中*100mg贈藥*	無櫃位		10mL   	Vial  
+2OP20 	Opdivo*低20mg*贈藥*	無櫃位		2mL    	Vial  
+2OPDI1	OPDIVO*中*100mg#	無櫃位		10mL   	Vial  
+2OPDI2	Opdivo*低20mg*自費	無櫃位		2mL    	Vial  
+2OPDI3	OPDIVO 120mg**高劑量*	無櫃位		12mL   	Vial  
+2OXALI	Oxalip 50mg*DC	A		10mL   	Vial  
+2PAD30	Padcev	冷C		30mg   	Vial  
+2PADC0	Padcev*贈藥	冷C		30mg   	Vial  
+2PBV  	Patent Blue V  2.5% 顯影劑	前置藥		2mL    	Vial  
+2PE100	Pexeda*低	冷A		100mg  	Vial  
+2PE500	PEXEDA*高	冷A		500mg  	Vial  
+2PERJ0	Perjeta"贈藥"420mg	冷C		14mL   	Vial  
+2PERJE	Perjeta 420mg/14mL/Vial	冷C		14mL   	Vial  
+2PHS10	Pharmorubicin 10mg Solution	冷C		5mL    	Vial  
+2PHS50	Pharmorubicin 50mg Solution	冷C		25mL   	Vial  
+2POLA0	Polivy*贈藥	冷B		30mg   	Vial  
+2POLIV	Polivy*院核	冷B		30mg   	Vial  
+2PRIMP	Primperan注射劑	前置藥		2mL    	Vial  
+2QARZI	Qarziba*院核	冷C		4.5mL  	Vial  
+2RASIT	Rasitol*針*20mg	前置藥		2mL    	Vial  
+2RIND4	RINDERON*針	前置藥		1mL    	Vial  
+2RIXA1	Rixathon*低*100mg	冷D		100mg  	Vial  
+2RIXA5	RIXATHON*高*500mg	冷D		500mg  	Vial  
+2RYBR0	Rybrevant 350mg*贈藥	冷C		7mL    	Vial  
+2RYBRE	Rybrevant 350mg*自費*院核	冷D		7mL    	Vial  
+2SIION	SII-Onco-BCG*院核*衛專	冷C		40mg   	Vial  
+2SNMC 	Stronger Neo-Minophagen C 自費	#N/A		20mL   	Vial  
+2TAXO2	Taxotere*低*20mg	C		1mL    	Vial  
+2TAXO8	TAXOTERE*高80mg*	C		4mL    	Vial  
+2TE140	Tecentriq 840mg贈藥*低*	無櫃位		14mL   	Vial  
+2TEC14	Tecentriq 840mg*低*自費	無櫃位		14mL   	Vial  
+2TECEN	TECENTRIQ 高劑量 1200mg	無櫃位		20mL   	Vial  
+2TEPAD	TEPADINA*高100mg自費*院核	無櫃位		100mg  	Vial  
+2TOPO4	Hycamtin 1mg/mL	冷A		4mL    	Vial  
+2TROD0	Trodelvy*贈藥	冷C		180mg  	Vial  
+2TRODE	Trodelvy*院核	冷D		180mg  	Vial  
+2ULCER	Ulcertin*針*20mg冷藏	前置藥		2mL    	Vial  
+2VECT0	Vectibix*贈藥*100mg	冷C		5mL    	Vial  
+2VECTI	Vectibix	冷C		5mL    	Vial  
+2VEL35	Velcade *新* 3.5mg	C		3.5mg  	Vial  
+2VIDA1	Vidaza*新* 德國廠	B		100mg  	Vial  
+2VINBL	Vinblastine 10mg/10mL*DBL*	冷D		10mg   	Vial  
+2VINCR	Vincristine 1mg/1mL*DBL*赫士睿	冷C		1mL    	Vial  
+2VITAC	Vitacal針2%CaCl2:鈣108.8mg防滲	前置藥		20mL   	Vial  
+2VYLOY	Vyloy*自費*院核	前置藥		100mg  	Vial  
+2XGEVA	Xgeva	前置藥		1.7mL  	Vial  
+2YOND0	Yondelis*贈藥	冷D		1mg    	Vial  
+2YONDE	Yondelis*自費*院核	冷D		1mg    	Vial  
+2ZAVES	Zavedos 5mg Solution	冷D		5mL    	Vial  
+2ZEPZ0	Zepzelca*贈藥	冷C		4mg    	Vial  
+2ZEPZE	Zepzelca*院核*自費	冷C		4mg    	Vial  
+2ZODON	Zodonic	前置藥		4mg    	Vial  
+2ZOLAD	Zoladex*低3.6mg*	前置藥		3.6mg  	Vial  
+2ATROP	Atropine 1mg/1mL/Amp	前置藥		1mg  	Amp`;
+
+        function InventoryApp() {
+            const [isSetupMode, setIsSetupMode] = useState(true);
+            const [firebaseConfig, setFirebaseConfig] = useState('');
+            const [isConnected, setIsConnected] = useState(false);
+            const [drugs, setDrugs] = useState([]);
+            const [inventoryRecords, setInventoryRecords] = useState([]);
+            const [currentMonth, setCurrentMonth] = useState(getCurrentYearMonth());
+            const [selectedLocation, setSelectedLocation] = useState('');
+            const [selectedDrug, setSelectedDrug] = useState(null);
+            const [quantity, setQuantity] = useState('');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [message, setMessage] = useState({ text: '', type: '' });
+            const [downloadMonth, setDownloadMonth] = useState(getCurrentYearMonth());
+            const [beingCounted, setBeingCounted] = useState({});
+            const [onlineUsers, setOnlineUsers] = useState(0);
+            const [recentActivity, setRecentActivity] = useState([]);
+            const [activeTab, setActiveTab] = useState('inventory'); // 新增：當前分頁
+            
+            const dbRef = useRef(null);
+            const userSessionRef = useRef(null);
+            const myUserId = useRef(`user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+
+            function getCurrentYearMonth() {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                return `${year}-${month}`;
+            }
+
+            // 初始化 Firebase
+            function initializeFirebase(configText) {
+                try {
+                    const config = JSON.parse(configText);
+                    
+                    // 初始化 Firebase
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(config);
+                    }
+                    
+                    dbRef.current = firebase.database();
+                    
+                    // 儲存配置到 localStorage
+                    localStorage.setItem('firebaseConfig', configText);
+                    
+                    setIsSetupMode(false);
+                    setIsConnected(true);
+                    setupRealtimeListeners();
+                    initializeDrugsData();
+                    setupOnlinePresence();
+                    
+                    setMessage({ text: 'Firebase 連線成功！', type: 'success' });
+                    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+                } catch (error) {
+                    setMessage({ text: `連線失敗: ${error.message}`, type: 'error' });
+                }
+            }
+
+            // 設定線上狀態
+            function setupOnlinePresence() {
+                const myConnectionsRef = dbRef.current.ref(`onlineUsers/${myUserId.current}`);
+                const lastOnlineRef = dbRef.current.ref(`onlineUsers/${myUserId.current}/lastOnline`);
+                
+                // 當連線時
+                dbRef.current.ref('.info/connected').on('value', (snapshot) => {
+                    if (snapshot.val() === true) {
+                        myConnectionsRef.set(true);
+                        myConnectionsRef.onDisconnect().remove();
+                        lastOnlineRef.onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+                    }
+                });
+                
+                // 監聽線上人數
+                dbRef.current.ref('onlineUsers').on('value', (snapshot) => {
+                    const users = snapshot.val() || {};
+                    setOnlineUsers(Object.keys(users).length);
+                });
+                
+                userSessionRef.current = myConnectionsRef;
+            }
+
+            // 初始化藥品資料
+            function initializeDrugsData() {
+                dbRef.current.ref('drugs').once('value', (snapshot) => {
+                    if (!snapshot.exists()) {
+                        // 如果資料庫沒有藥品資料，上傳初始資料
+                        parseDrugsData(initialDrugsData, true);
+                    } else {
+                        const drugsData = snapshot.val();
+                        setDrugs(Object.values(drugsData));
+                    }
+                });
+            }
+
+            // 設定即時監聽
+            function setupRealtimeListeners() {
+                // 監聽藥品資料
+                dbRef.current.ref('drugs').on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        const drugsData = snapshot.val();
+                        setDrugs(Object.values(drugsData));
+                    }
+                });
+
+                // 監聽盤點記錄
+                dbRef.current.ref('inventoryRecords').on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        const records = snapshot.val();
+                        setInventoryRecords(Object.values(records));
+                    }
+                });
+
+                // 監聽正在盤點的藥品
+                dbRef.current.ref('beingCounted').on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        setBeingCounted(snapshot.val() || {});
+                    } else {
+                        setBeingCounted({});
+                    }
+                });
+
+                // 監聽最近活動
+                dbRef.current.ref('recentActivity').limitToLast(10).on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        const activities = [];
+                        snapshot.forEach((child) => {
+                            activities.unshift(child.val());
+                        });
+                        setRecentActivity(activities);
+                    }
+                });
+            }
+
+            // 解析藥品資料
+            function parseDrugsData(csvText, uploadToFirebase = false) {
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const parsedDrugs = results.data.map((row, index) => ({
+                            id: `drug_${index}`,
+                            code: row['藥碼'] || '',
+                            name: row['藥品名稱'] || '',
+                            location: row['櫃位'] || '',
+                            stock: row['實際庫存'] || '',
+                            spec: row['規格'] || '',
+                            unit: row['單位'] || ''
+                        }));
+                        
+                        if (uploadToFirebase && dbRef.current) {
+                            const drugsObj = {};
+                            parsedDrugs.forEach(drug => {
+                                drugsObj[drug.id] = drug;
+                            });
+                            dbRef.current.ref('drugs').set(drugsObj);
+                        } else {
+                            setDrugs(parsedDrugs);
+                        }
+                    }
+                });
+            }
+
+            // 獲取所有櫃位
+            function getLocations() {
+                const locations = [...new Set(drugs.map(d => d.location).filter(l => l))];
+                return locations.sort();
+            }
+
+            // 獲取指定櫃位的藥品
+            function getDrugsByLocation(location) {
+                if (!location) return [];
+                
+                const completedDrugIds = new Set(
+                    inventoryRecords
+                        .filter(r => r.month === currentMonth && r.location === location)
+                        .map(r => r.drugId)
+                );
+
+                return drugs
+                    .filter(d => d.location === location && !completedDrugIds.has(d.id))
+                    .filter(d => {
+                        if (!searchTerm) return true;
+                        const term = searchTerm.toLowerCase();
+                        return d.name.toLowerCase().includes(term) || 
+                               d.code.toLowerCase().includes(term);
+                    })
+                    .sort((a, b) => a.name.localeCompare(b.name));
+            }
+
+            // 獲取已完成的盤點數量
+            function getCompletedCount(location) {
+                return inventoryRecords.filter(
+                    r => r.month === currentMonth && r.location === location
+                ).length;
+            }
+
+            // 標記正在盤點
+            function markAsBeingCounted(drug) {
+                if (selectedDrug?.id === drug.id) {
+                    setSelectedDrug(null);
+                    if (dbRef.current) {
+                        dbRef.current.ref(`beingCounted/${drug.id}`).remove();
+                    }
+                } else {
+                    setSelectedDrug(drug);
+                    if (dbRef.current) {
+                        dbRef.current.ref(`beingCounted/${drug.id}`).set({
+                            userId: myUserId.current,
+                            drugName: drug.name,
+                            timestamp: firebase.database.ServerValue.TIMESTAMP
+                        }).then(() => {
+                            // 設定 30 秒後自動解鎖
+                            setTimeout(() => {
+                                if (dbRef.current) {
+                                    dbRef.current.ref(`beingCounted/${drug.id}`).once('value', (snapshot) => {
+                                        const data = snapshot.val();
+                                        if (data && data.userId === myUserId.current) {
+                                            dbRef.current.ref(`beingCounted/${drug.id}`).remove();
+                                        }
+                                    });
+                                }
+                            }, 30000);
+                        });
+                    }
+                }
+            }
+
+            // 儲存盤點資料
+            function saveInventory() {
+                if (!selectedDrug || !quantity) {
+                    setMessage({ text: '請選擇藥品並輸入數量', type: 'error' });
+                    return;
+                }
+
+                const record = {
+                    id: `record_${Date.now()}`,
+                    month: currentMonth,
+                    location: selectedLocation,
+                    drugId: selectedDrug.id,
+                    drugCode: selectedDrug.code,
+                    drugName: selectedDrug.name,
+                    quantity: parseInt(quantity),
+                    timestamp: firebase.database.ServerValue.TIMESTAMP,
+                    userId: myUserId.current
+                };
+
+                if (dbRef.current) {
+                    // 儲存記錄
+                    dbRef.current.ref(`inventoryRecords/${record.id}`).set(record);
+                    
+                    // 移除正在盤點標記
+                    dbRef.current.ref(`beingCounted/${selectedDrug.id}`).remove();
+                    
+                    // 新增活動記錄
+                    dbRef.current.ref('recentActivity').push({
+                        action: '完成盤點',
+                        drugName: selectedDrug.name,
+                        location: selectedLocation,
+                        quantity: parseInt(quantity),
+                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                    });
+                }
+
+                setSelectedDrug(null);
+                setQuantity('');
+                setSearchTerm('');
+                setMessage({ text: '儲存成功！資料已同步到雲端', type: 'success' });
+                
+                setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+            }
+
+            // 下載盤點資料
+            function downloadInventory() {
+                const records = inventoryRecords.filter(r => r.month === downloadMonth);
+                
+                if (records.length === 0) {
+                    setMessage({ text: '該月份沒有盤點資料', type: 'error' });
+                    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+                    return;
+                }
+
+                const csvContent = [
+                    ['盤點月份', '櫃位', '藥碼', '藥品名稱', '盤點數量', '盤點時間'].join(','),
+                    ...records.map(r => [
+                        r.month,
+                        r.location,
+                        r.drugCode,
+                        r.drugName,
+                        r.quantity,
+                        new Date(r.timestamp).toLocaleString('zh-TW')
+                    ].join(','))
+                ].join('\n');
+
+                const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `盤點資料_${downloadMonth}.csv`;
+                link.click();
+
+                setMessage({ text: '下載成功！', type: 'success' });
+                setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+            }
+
+            // 上傳藥品清單
+            function handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    parseDrugsData(e.target.result, true);
+                    setMessage({ text: '藥品清單更新成功！已同步到所有使用者', type: 'success' });
+                    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+                };
+                reader.readAsText(file);
+            }
+
+            // 檢查是否有儲存的配置
+            useEffect(() => {
+                const savedConfig = localStorage.getItem('firebaseConfig');
+                if (savedConfig) {
+                    initializeFirebase(savedConfig);
+                } else {
+                    parseDrugsData(initialDrugsData);
+                }
+
+                // 清理函數
+                return () => {
+                    if (userSessionRef.current) {
+                        userSessionRef.current.remove();
+                    }
+                };
+            }, []);
+
+            const stats = {
+                totalDrugs: drugs.length,
+                completedThisMonth: inventoryRecords.filter(r => r.month === currentMonth).length,
+                currentLocationTotal: selectedLocation ? drugs.filter(d => d.location === selectedLocation).length : 0
+            };
+
+            // 設定模式畫面
+            if (isSetupMode) {
+                return (
+                    <div className="setup-modal">
+                        <div className="setup-content">
+                            <h2>🔧 Firebase 設定</h2>
+                            <p>請貼上您的 Firebase 配置 JSON（請參考設定教學文件）</p>
+                            <textarea
+                                value={firebaseConfig}
+                                onChange={(e) => setFirebaseConfig(e.target.value)}
+                                placeholder='請在此貼上您的 Firebase 配置 JSON'
+                                style={{ resize: 'vertical' }}
+                            ></textarea>
+                            <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+                                <button onClick={() => initializeFirebase(firebaseConfig)}>
+                                    ✅ 連線
+                                </button>
+                                <button className="secondary" onClick={() => {
+                                    setIsSetupMode(false);
+                                    parseDrugsData(initialDrugsData);
+                                }}>
+                                    🚫 離線模式
+                                </button>
+                            </div>
+                            {message.text && (
+                                <div className={message.type === 'success' ? 'success-message' : 'error-message'} style={{ marginTop: '15px' }}>
+                                    {message.text}
+                                </div>
+                            )}
+                            <div className="info-box" style={{ marginTop: '20px' }}>
+                                <strong>提示：</strong>如果您還沒有 Firebase 配置，請查看「Firebase設定教學.txt」文件
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="container">
+                    {/* 連線狀態 */}
+                    <div className="connection-status">
+                        <div className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></div>
+                        <span>{isConnected ? `🟢 已連線 (${onlineUsers} 人在線)` : '🔴 離線模式'}</span>
+                    </div>
+
+                    <h1>📋 住院盤點系統</h1>
+
+                    {/* 訊息顯示 */}
+                    {message.text && (
+                        <div className={message.type === 'success' ? 'success-message' : message.type === 'warning' ? 'warning-message' : 'error-message'}>
+                            {message.text}
+                        </div>
+                    )}
+
+                    {/* 統計卡片 */}
+                    <div className="stats">
+                        <div className="stat-card">
+                            <div className="stat-number">{stats.totalDrugs}</div>
+                            <div className="stat-label">總藥品數</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-number">{stats.completedThisMonth}</div>
+                            <div className="stat-label">本月已盤點</div>
+                        </div>
+                        {selectedLocation && (
+                            <div className="stat-card">
+                                <div className="stat-number">
+                                    {getCompletedCount(selectedLocation)}/{stats.currentLocationTotal}
+                                </div>
+                                <div className="stat-label">當前櫃位進度</div>
+                            </div>
+                        )}
+                        {isConnected && (
+                            <div className="stat-card">
+                                <div className="stat-number">{onlineUsers}</div>
+                                <div className="stat-label">線上人數</div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 最近活動 */}
+                    {isConnected && recentActivity.length > 0 && (
+                        <div className="section">
+                            <h2 className="section-title">📊 最近活動</h2>
+                            <div className="recent-activity">
+                                {recentActivity.map((activity, index) => (
+                                    <div key={index} className="activity-item">
+                                        <div>
+                                            <strong>{activity.action}：</strong>
+                                            {activity.drugName} ({activity.location}) - 數量: {activity.quantity}
+                                        </div>
+                                        <div className="activity-time">
+                                            {new Date(activity.timestamp).toLocaleString('zh-TW')}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 分頁容器 */}
+                    <div className="tabs-container">
+                        {/* 分頁標籤 */}
+                        <div className="tabs-header">
+                            <button 
+                                className={`tab-button ${activeTab === 'inventory' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('inventory')}
+                            >
+                                <span className="tab-icon">📝</span>
+                                盤點區
+                            </button>
+                            <button 
+                                className={`tab-button ${activeTab === 'download' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('download')}
+                            >
+                                <span className="tab-icon">📥</span>
+                                下載區
+                            </button>
+                            <button 
+                                className={`tab-button ${activeTab === 'upload' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('upload')}
+                            >
+                                <span className="tab-icon">📤</span>
+                                上傳區
+                            </button>
+                        </div>
+
+                        {/* 分頁內容 */}
+                        <div className="tab-content">
+                            {/* 盤點區內容 */}
+                            {activeTab === 'inventory' && (
+                                <div>
+
+                        <div className="form-group">
+                            <label>步驟 1：選擇盤點月份</label>
+                            <input
+                                type="month"
+                                value={currentMonth}
+                                onChange={(e) => {
+                                    setCurrentMonth(e.target.value);
+                                    setSelectedLocation('');
+                                    setSelectedDrug(null);
+                                }}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label>步驟 2：選擇盤點位置</label>
+                            <select
+                                value={selectedLocation}
+                                onChange={(e) => {
+                                    setSelectedLocation(e.target.value);
+                                    setSelectedDrug(null);
+                                    setSearchTerm('');
+                                }}
+                            >
+                                <option value="">請選擇櫃位</option>
+                                {getLocations().map(loc => (
+                                    <option key={loc} value={loc}>{loc}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {selectedLocation && (
+                            <div className="current-selection">
+                                <strong>目前盤點位置：</strong> {selectedLocation}
+                                <span style={{ marginLeft: '20px' }}>
+                                    <strong>已完成：</strong> {getCompletedCount(selectedLocation)}/{stats.currentLocationTotal}
+                                </span>
+                            </div>
+                        )}
+
+                        {selectedLocation && (
+                            <div className="form-group">
+                                <label>步驟 3：選擇要盤點的藥品</label>
+                                
+                                <div className="search-box">
+                                    <input
+                                        type="text"
+                                        placeholder="搜尋藥品名稱或藥碼..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                    <span className="search-icon">🔍</span>
+                                </div>
+
+                                <div className="drug-list">
+                                    {getDrugsByLocation(selectedLocation).length === 0 ? (
+                                        <div className="info-box">
+                                            {searchTerm ? '沒有符合搜尋條件的藥品' : '此櫃位的所有藥品都已盤點完成！'}
+                                        </div>
+                                    ) : (
+                                        getDrugsByLocation(selectedLocation).map(drug => {
+                                            const isBeingCounted = beingCounted[drug.id];
+                                            const isMySelection = selectedDrug?.id === drug.id;
+                                            const isOtherCounting = isBeingCounted && !isMySelection;
+                                            
+                                            return (
+                                                <div
+                                                    key={drug.id}
+                                                    className={`drug-item ${isMySelection ? 'selected' : ''} ${isOtherCounting ? 'being-counted' : ''}`}
+                                                    onClick={() => !isOtherCounting && markAsBeingCounted(drug)}
+                                                    style={isOtherCounting ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
+                                                >
+                                                    {isOtherCounting && <span className="counting-badge">有人正在盤點</span>}
+                                                    <strong>{drug.name}</strong>
+                                                    <div style={{ fontSize: '0.9em', color: isMySelection ? 'white' : '#666', marginTop: '5px' }}>
+                                                        藥碼: {drug.code} | 規格: {drug.spec} | 單位: {drug.unit}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {selectedDrug && (
+                            <div className="form-group">
+                                <label>步驟 4：輸入盤點數量</label>
+                                <div className="info-box">
+                                    <strong>已選擇：</strong> {selectedDrug.name} ({selectedDrug.code})
+                                </div>
+                                <input
+                                    type="number"
+                                    placeholder="請輸入盤點數量"
+                                    value={quantity}
+                                    onChange={(e) => setQuantity(e.target.value)}
+                                    min="0"
+                                />
+                                <div style={{ marginTop: '15px' }}>
+                                    <button onClick={saveInventory}>💾 儲存盤點資料</button>
+                                </div>
+                            </div>
+                        )}
+                                </div>
+                            )}
+
+                            {/* 下載區內容 */}
+                            {activeTab === 'download' && (
+                                <div>
+                        <div className="form-group">
+                            <label>選擇要下載的年月</label>
+                            <input
+                                type="month"
+                                value={downloadMonth}
+                                onChange={(e) => setDownloadMonth(e.target.value)}
+                            />
+                        </div>
+                        <button onClick={downloadInventory}>⬇️ 下載盤點資料</button>
+                        
+                        <div className="info-box" style={{ marginTop: '15px' }}>
+                            該月份共有 <strong>{inventoryRecords.filter(r => r.month === downloadMonth).length}</strong> 筆盤點記錄
+                        </div>
+                                </div>
+                            )}
+
+                            {/* 上傳區內容 */}
+                            {activeTab === 'upload' && isConnected && (
+                                <div>
+                            <div className="warning-message">
+                                ⚠️ 上傳新的藥品清單會覆蓋現有資料，並同步到所有使用者
+                            </div>
+                            <div 
+                                className="upload-area"
+                                onClick={() => document.getElementById('fileInput').click()}
+                            >
+                                <p style={{ fontSize: '2em', marginBottom: '10px' }}>📄</p>
+                                <p>點擊此處上傳藥品清單檔案</p>
+                                <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
+                                    支援 CSV 格式（須包含：藥碼、藥品名稱、櫃位、規格、單位欄位）
+                                </p>
+                            </div>
+                            <input
+                                id="fileInput"
+                                type="file"
+                                accept=".csv,.txt"
+                                onChange={handleFileUpload}
+                            />
+                            
+                            <div className="info-box" style={{ marginTop: '15px' }}>
+                                目前系統中共有 <strong>{drugs.length}</strong> 筆藥品資料
+                            </div>
+                                </div>
+                            )}
+
+                            {/* 上傳區 - 離線模式提示 */}
+                            {activeTab === 'upload' && !isConnected && (
+                                <div>
+                                    <div className="warning-message">
+                                        ⚠️ 上傳功能需要連線模式才能使用，以確保資料同步到所有使用者
+                                    </div>
+                                    <div className="info-box" style={{ marginTop: '15px' }}>
+                                        請先完成 Firebase 連線設定，或使用離線模式進行盤點
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<InventoryApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>
