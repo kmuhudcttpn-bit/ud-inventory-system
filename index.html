@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>住院盤點系統</title>
+    <title>盤點系統</title>
     
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -635,7 +635,7 @@
             const [firebaseConfig, setFirebaseConfig] = useState(JSON.stringify({
                 "apiKey": "AIzaSyAs68fX_3NhFw6eCtbg-YEOQyX5ffCjgSM",
                 "authDomain": "kmuh-inventory-2025.firebaseapp.com",
-                "databaseURL": "https://kmuh-inventory-2025-default-rtdb.asia-southeast1.firebasedatabase.app",
+                "databaseURL": "https://kmuh-inventory-2025-default-rtdb.firebaseio.com",
                 "projectId": "kmuh-inventory-2025",
                 "storageBucket": "kmuh-inventory-2025.appspot.com",
                 "messagingSenderId": "264425776463",
@@ -655,23 +655,37 @@
             const [onlineUsers, setOnlineUsers] = useState(0);
             const [recentActivity, setRecentActivity] = useState([]);
             const [activeTab, setActiveTab] = useState('inventory'); // 新增：當前分頁
+            const [userIP, setUserIP] = useState(''); // 新增：用戶 IP
             
             const dbRef = useRef(null);
             const userSessionRef = useRef(null);
-            const myUserId = useRef(null);
+            const myUserId = useRef(null); // 改為以 IP 為基礎
 
-if (!myUserId.current) {
-    const savedId = localStorage.getItem('inventoryUserId');
-    if (savedId) {
-        // 之前已經產生過 ID，就沿用
-        myUserId.current = savedId;
-    } else {
-        // 第一次使用，產生一個新的 ID
-        const newId = `user_${Math.random().toString(36).substr(2, 9)}`;
-        localStorage.setItem('inventoryUserId', newId);
-        myUserId.current = newId;
-    }
-}
+            // 獲取用戶 IP 位址
+            async function fetchUserIP() {
+                try {
+                    const response = await fetch('https://api.ipify.org?format=json');
+                    const data = await response.json();
+                    const ip = data.ip;
+                    // 將 IP 轉換為安全的 Firebase key（把 . 替換成 _）
+                    const safeIP = ip.replace(/\./g, '_');
+                    myUserId.current = `ip_${safeIP}`;
+                    setUserIP(ip);
+                    return safeIP;
+                } catch (error) {
+                    console.error('無法獲取 IP:', error);
+                    // 如果無法獲取 IP，使用 localStorage 中儲存的 ID 或生成新的
+                    const savedId = localStorage.getItem('inventoryUserId');
+                    if (savedId) {
+                        myUserId.current = savedId;
+                    } else {
+                        const newId = `user_${Math.random().toString(36).substr(2, 9)}`;
+                        localStorage.setItem('inventoryUserId', newId);
+                        myUserId.current = newId;
+                    }
+                    return null;
+                }
+            }
 
             function getCurrentYearMonth() {
                 const now = new Date();
@@ -681,7 +695,7 @@ if (!myUserId.current) {
             }
 
             // 初始化 Firebase
-            function initializeFirebase(configText) {
+            async function initializeFirebase(configText) {
                 try {
                     const config = JSON.parse(configText);
                     
@@ -694,6 +708,9 @@ if (!myUserId.current) {
                     
                     // 儲存配置到 localStorage
                     localStorage.setItem('firebaseConfig', configText);
+                    
+                    // 先獲取 IP 位址
+                    await fetchUserIP();
                     
                     setIsSetupMode(false);
                     setIsConnected(true);
@@ -708,24 +725,36 @@ if (!myUserId.current) {
                 }
             }
 
-            // 設定線上狀態
+            // 設定線上狀態（以 IP 位址為基礎）
             function setupOnlinePresence() {
+                if (!myUserId.current) {
+                    console.log('尚未取得用戶 ID，稍後重試');
+                    return;
+                }
+                
                 const myConnectionsRef = dbRef.current.ref(`onlineUsers/${myUserId.current}`);
                 const lastOnlineRef = dbRef.current.ref(`onlineUsers/${myUserId.current}/lastOnline`);
                 
                 // 當連線時
                 dbRef.current.ref('.info/connected').on('value', (snapshot) => {
                     if (snapshot.val() === true) {
-                        myConnectionsRef.set(true);
+                        // 設定此 IP 為線上狀態
+                        myConnectionsRef.set({
+                            online: true,
+                            ip: myUserId.current,
+                            timestamp: firebase.database.ServerValue.TIMESTAMP
+                        });
                         myConnectionsRef.onDisconnect().remove();
                         lastOnlineRef.onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
                     }
                 });
                 
-                // 監聽線上人數
+                // 監聯線上人數（以唯一 IP 計算）
                 dbRef.current.ref('onlineUsers').on('value', (snapshot) => {
                     const users = snapshot.val() || {};
-                    setOnlineUsers(Object.keys(users).length);
+                    // 計算唯一的 IP 數量
+                    const uniqueIPs = new Set(Object.keys(users));
+                    setOnlineUsers(uniqueIPs.size);
                 });
                 
                 userSessionRef.current = myConnectionsRef;
@@ -1069,7 +1098,7 @@ if (!myUserId.current) {
                         <span>{isConnected ? `🟢 已連線 (${onlineUsers} 人在線)` : '🔴 離線模式'}</span>
                     </div>
 
-                    <h1>📋 住院盤點系統</h1>
+                    <h1>📋 盤點系統</h1>
 
                     {/* 訊息顯示 */}
                     {message.text && (
